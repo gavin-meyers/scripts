@@ -1,7 +1,4 @@
-#!/bin/bash
- 
-#
-#
+#!/usr/bin/env bash
  
 #set -x
 traceroute -n -T $1 > vtrace.tmp
