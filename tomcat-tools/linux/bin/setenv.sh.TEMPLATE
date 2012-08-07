@@ -1,0 +1,23 @@
+# Drop this script into CATALINA_BASE to set options that will be used when 
+# Tomcat is started using the out of the box scripts that come with Tomcat.
+
+TOMCAT_DIR=@tomcat.dir@
+TOMCAT_MAXHEAP=@tomcat.maxHeap@
+TOMCAT_STARTHEAP=@tomcat.startHeap@
+TOMCAT_PERMSIZE=@tomcat.permSize@
+TOMCAT_MAXPERMSIZE=@tomcat.maxPermSize@
+TOMCAT_JMX_PORT=@tomcat.jmx.port@
+
+export JAVA_OPTS="-server \
+   -d64 \
+   -Dlog.dir="${TOMCAT_DIR}/logs" \
+   -Dcom.sun.management.jmxremote \
+   -Dcom.sun.management.jmxremote.port=${TOMCAT_JMX_PORT} \
+   -Dcom.sun.management.jmxremote.ssl=false \
+   -Dcom.sun.management.jmxremote.authenticate=false \
+   -Xmx${TOMCAT_MAXHEAP} \
+   -Xms${TOMCAT_STARTHEAP} \
+   -XX:PermSize=${TOMCAT_PERMSIZE} \
+   -XX:MaxPermSize=${TOMCAT_MAXPERMSIZE}"
+echo "${0}: Setting JAVA_OPTS=${JAVA_OPTS}"
+

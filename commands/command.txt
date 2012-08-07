@@ -1,0 +1,6 @@
+##Get Total Memory in GB
+echo `cat /proc/meminfo | grep MemTotal | awk '{ print $2/1024/1024 } 'GB`
+
+##Get Tomcat PID
+echo `ps aux | grep org.apache.catalina.startup.Bootstrap | grep -v grep | awk '{ print $2 }'`
+

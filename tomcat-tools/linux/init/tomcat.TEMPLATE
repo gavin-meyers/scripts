@@ -1,0 +1,259 @@
+#!/bin/sh
+#
+# Enable chkconfig on RH-based systems:
+# chkconfig: 2345 77 23
+# description: Startup script for Tomcat instance @tomcat.instance.id@
+#
+######################################################################
+## This file is a template, intended to be process by ant, puppet,
+## chef, etc. and put into /etc/init.d to control an instance of Tomcat.
+## Multiple copies can be installed on a single machine to run
+## multiple instances of Tomcat.
+######################################################################
+
+VERBOSE=
+
+######################################################################
+# Templated script variables
+######################################################################
+
+# Leave blank to run as root (you'll go to hell, though)
+USER=@tomcat.user@
+GROUP=@tomcat.group@
+LSOF="@lsof.path@"
+[ -n "${LSOF}" ] || LSOF=/usr/sbin/lsof
+
+JAVA_HOME=@java.home@
+# Tomcat installation files, shared across instances
+CATALINA_HOME=@tomcat.install.dir@
+# Runtime files for the given instance of Tomcat
+CATALINA_BASE=@tomcat.runtime.base@-@tomcat.instance.id@
+
+HTTP_PORT=@tomcat.http.port@
+[ -n "${HTTP_PORT}" ] || HTTP_PORT=8080
+JMX_PORT=@tomcat.jmx.port@
+
+MAXHEAP="@tomcat.maxHeap@"
+STARTHEAP="@tomcat.startHeap@"
+MAXPERMSIZE="@tomcat.maxPermSize@"
+PERMSIZE="@tomcat.permSize@"
+[ -n "${MAXHEAP}" ] || MAXHEAP=800m
+[ -n "${STARTHEAP}" ] || STARTHEAP=512m
+[ -n "${MAXPERMSIZE}" ] || MAXPERMSIZE=512m
+[ -n "${PERMSIZE}" ] || PERMSIZE=256m
+
+MAXNEWSIZE=@tomcat.maxNewSize@
+NEWSIZE=@tomcat.NewSize@
+SURVIVOR_RATIO=@tomcat.survivorRatio@
+TARGET_SURVIVOR_RATIO=@tomcat.targetSurvivorRatio@
+
+SSL_TRUSTSTORE="@tomcat.ssl.trustStore@"
+SSL_TRUSTSTORE_PASSWORD="@tomcat.ssl.trustStore.password@"
+SSL_KEYSTORE="@tomcat.ssl.keyStore@"
+SSL_KEYSTORE_PASSWORD="@tomcat.ssl.keyStore.password@"
+
+
+######################################################################
+# Environment variables used by Tomcat's startup scripts
+######################################################################
+
+JAVA_OPTS="-server -Djava.awt.headless=true -d64 \
+    -Xmx${MAXHEAP} \
+    -Xms${STARTHEAP} \
+    -XX:PermSize=${PERMSIZE} \
+    -XX:MaxPermSize=${MAXPERMSIZE}"
+
+[ -n "${MAXNEWSIZE}" ] && JAVA_OPTS="${JAVA_OPTS} -XX:MaxNewSize=${MAXNEWSIZE}"
+[ -n "${NEWSIZE}" ] && JAVA_OPTS="${JAVA_OPTS} -XX:NewSize=${NEWSIZE}"
+[ -n "${SURVIVOR_RATIO}" ] && JAVA_OPTS="${JAVA_OPTS} -XX:SurvivorRatio=${SURVIVOR_RATIO}"
+[ -n "${TARGET_SURVIVOR_RATIO}" ] && JAVA_OPTS="${JAVA_OPTS} -XX:TargetSurvivorRatio=${TARGET_SURVIVOR_RATIO}"
+
+[ -n "${JMX_PORT}" ] && JAVA_OPTS="${JAVA_OPTS} \
+    -Dcom.sun.management.jmxremote.port=${JMX_PORT}"
+    -Dcom.sun.management.jmxremote \
+    -Dcom.sun.management.jmxremote.ssl=false \
+    -Dcom.sun.management.jmxremote.authenticate=false"
+
+CATALINA_OPTS=
+[ -n "${SSL_JKS" ] && CATALINA_OPTS="${CATALINA_OPTS} \
+    -Djavax.net.ssl.trustStore=${SSL_TRUSTSTORE} \
+    -Djavax.net.ssl.trustStorePassword=${SSL_TRUSTSTORE_PASSWORD} \
+    -Djavax.net.ssl.keyStore=${SSL_KEYSTORE} \
+    -Djavax.net.ssl.keyStorePassword=${SSL_KEYSTORE_PASSWORD}"
+[ -f "${CATALINA_BASE}/conf/jaas.config" ] && CATALINA_OPTS="${CATALINA_OPTS} \
+    -Djava.security.auth.login.config=${CATALINA_BASE}/conf/jaas.config"
+
+export JAVA_HOME JAVA_OPTS CATALINA_HOME CATALINA_BASE CATALINA_OPTS
+
+CATALINA_SCRIPT="$CATALINA_HOME/bin/catalina.sh"
+CATALINA_LOG="$CATALINA_BASE/logs/catalina.out"
+
+
+######################################################################
+# Function declarations
+######################################################################
+
+bail()
+{
+    echo $*
+    echo "Usage: $0 {start|stop|restart}"
+    echo "   You can use multiple commands, for example:"
+    echo "   $0 stop start"
+    exit 1
+}
+
+verboseInfo()
+{
+    [ -n "${VERBOSE}" ] && echo $*
+}
+
+getPid()
+{
+    PID=`"${LSOF}" -t -i:${HTTP_PORT}`
+}
+
+status()
+{
+    getPid
+    STATUS="unknown"
+    if [ -n "${PID}" ] ; then
+        for pid in ${PID} ; do
+            COMM=`ps -p "${pid}" | grep java`
+            if [ -n "${COMM}" ] ; then
+                verboseInfo "Tomcat is running, process $pid"
+                STATUS="running"
+            else
+                verboseInfo "Tomcat has stopped"
+                STATUS="stopped"
+            fi
+        done
+    else
+        verboseInfo "Tomcat is not running"
+        STATUS="stopped"
+    fi
+}
+
+clean()
+{
+    status
+    if [ "${STATUS}" = "running" ] ; then
+        echo "Not cleaning logs because Tomcat is currently running"
+        return
+    fi
+    if [ -d "${CATALINA_BASE}/logs" ] ; then
+       DATESTAMP=`date '+%Y%m%d_%H%M%S'`
+       LOGARC="${CATALINA_BASE}/logs/BAK-${DATESTAMP}"
+       [ -d "${LOGARC}" ] || mkdir "${LOGARC}"
+       mv "${CATALINA_BASE}/logs"/*log "${CATALINA_BASE}/logs"/*out "${CATALINA_BASE}/logs"/*.txt "${LOGARC}"/
+   fi
+   [ -d "${CATALINA_BASE}/work/Catalina" ] && rm -rf "${CATALINA_BASE}/work/Catalina"
+}
+
+start()
+{
+    status
+    if [ "${STATUS}" = "running" ] ; then
+      echo "Tomcat is already running, not starting it"
+      return
+    fi
+    clean
+    "${CATALINA_SCRIPT}" start
+}
+
+niceStop()
+{
+   getPid
+   if [ -n "${PID}" ] ; then
+       for p in ${PID} ; do
+           COMM=`ps -p "${p}" -o comm= | grep java`
+           if [ -n "${COMM}" ] ; then
+               verboseInfo "Asking Tomcat to stop itself (pid $p)"
+               kill "${p}"
+           fi
+       done
+   fi
+}
+
+cruelStop()
+{
+   getPid
+   if [ -n "${PID}" ] ; then
+       for p in ${PID} ; do
+           COMM=`ps -p "${p}" -o comm= | grep java`
+           if [ -n "${COMM}" ] ; then
+               verboseInfo "Killing Tomcat process (pid $p)"
+               kill -9 "${p}"
+           fi
+       done
+   fi
+}
+
+stop()
+{
+   for try in 5 4 3 2 1 ; do
+       niceStop
+       status
+       if [ "$STATUS" = "running" ] ; then
+           echo "Tomcat still running, waiting 5 seconds to try again ($try)"
+           sleep 5
+       else
+           break
+       fi
+   done
+   status
+   if [ "$STATUS" = "running" ] ; then
+       echo "Tomcat has failed to stop itself, taking extreme measures"
+       cruelStop
+   fi
+}
+
+
+######################################################################
+# Main logic
+######################################################################
+
+[ -x "$CATALINA_SCRIPT" ] || bail "Can't find executable '$CATALINA_SCRIPT'"
+[ -d "$CATALINA_HOME" ] || bail "Can't find CATALINA_HOME '$CATALINA_HOME'"
+[ -d "$CATALINA_BASE" ] || bail "Can't find CATALINA_BASE '$CATALINA_BASE'"
+[ -n "$1" ] || bail
+
+# Run as $USER
+if [ -n "${USER}" ] ; then
+    ID=`id -u -n`
+    if [ "$ID" = "root" ] ; then
+        exec su "${USER}" "$0" $*
+    elif [ "$ID" != "$USER" ] ; then
+        echo "Attempting to sudo to re-run this script"
+        exec sudo $0 $*
+    fi
+fi
+
+while [ -n "$1" ] ; do
+    case "$1" in
+        start)
+            start
+            ;;
+        stop)
+            stop
+            ;;
+        restart)
+            stop
+            start
+            ;;
+        kill)
+            cruelStop
+            ;;
+        clean)
+            clean
+            ;;
+        status)
+            status
+            echo $STATUS
+            ;;
+        *)
+            bail
+            ;;
+        esac
+    shift
+done
+
