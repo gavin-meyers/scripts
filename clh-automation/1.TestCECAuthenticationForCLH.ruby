@@ -8,7 +8,7 @@ require "watir-webdriver"
 require "logger"
 require "test/unit"
 
-class TestCECAuthenticationForCLH < Test::Unit::TestCase
+class TestCECAuthenticationForRa < Test::Unit::TestCase
   
   def setup
     @browser=Watir::Browser.new :chrome
