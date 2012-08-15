@@ -9,3 +9,8 @@ echo `ps aux | grep org.apache.catalina.startup.Bootstrap | grep -v grep | awk '
 <Valve className="org.apache.catalina.valves.AccessLogValve"
                  directory="logs" prefix="timing." suffix=".log"
                  pattern="%t %U %s %D" resolveHosts="false" />
+
+##### Cloudwatch
+http://cloudwatch.eaascisco.com/nagios/cgi-bin/status.cgi
+username: nagiosadmin
+Password: EaaSNagios123
