@@ -13,8 +13,8 @@ class TestCECAuthenticationForRa < Test::Unit::TestCase
   def setup
     @browser=Watir::Browser.new :chrome
     @base_url="learninghub.cisco.com"
-    @cec_id="rajasoun"
-    @cec_password="Raja$1050"
+    @cec_id=""
+    @cec_password=""
     @user_welcome_message="Welcome, Raja Soundaramourty"
     
     @log = Logger.new('clh-sanity-test.log')
